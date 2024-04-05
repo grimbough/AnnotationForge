@@ -1463,14 +1463,43 @@ makeOrgPackageFromNCBI <-
 ## Code for adding Ensembl IDs for those species supported by ensembl
 ## with GTF files.
 
+## use the Ensemb Rest API to get the current version
+getCurrentEnsemblRelease <- function() {
+    
+    req <- httr2::request("https://rest.ensembl.org/info/data/") |>
+        req_headers("Accept" = "application/json")
+    
+    version <- req |> 
+        req_perform() |>
+        resp_body_json() |>
+        unlist() |>
+        as.integer()
+    
+    return(version)
+}
+
+## list files in FTP directory
+getFilesInEnsemblFTP <- function(species, release) {
+    
+    ftp_dir <- sprintf("ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/", release, species)
+    
+    list_files <- curl::new_handle()
+    curl::handle_setopt(list_files, ftp_use_epsv = TRUE, dirlistonly = TRUE)
+    con <- curl::curl(url = ftp_dir, open = "r", handle = list_files)
+    files <- readLines(con)
+    close(con)
+    
+    return(files)
+    
+}
+
 ## lets make a helper to troll the ftp site and get ensembl to entrez
 ## gene ID data.  The names will be tax ids...
 getFastaSpeciesDirs <-
     function(release=NULL)
 {
     if (is.null(release)) {
-      ensVersions <- biomaRt::listEnsemblArchives()
-      release <- as.integer(ensVersions$version[ensVersions$current_release=="*"])
+      release <- getCurrentEnsemblRelease()
     }
     baseUrl <- paste0("ftp://ftp.ensembl.org/pub/release-", release, "/mysql/")
     loadNamespace("RCurl")
@@ -1527,15 +1556,13 @@ g.species <-
 
 ## helper to make sure that we *have* entrez gene IDs to map to at ensembl!
 .ensemblMapsToEntrezId <-
-    function(taxId, datSets, release=NULL)
+    function(taxId, species, release=NULL)
 {
-    message("TaxID: ",taxId)
-    Sys.sleep(5)
-    loadNamespace("biomaRt")
-    datSet <- datSets[names(datSets) %in% taxId]
-    ens <- biomaRt::useEnsembl('ensembl', datSet, version=release)
-    at <- biomaRt::listAttributes(ens)
-    any(grepl('entrezgene',at$name))
+    message("TaxID: ", taxId)
+
+    files <- getFilesInEnsemblFTP(species = species, release = release)
+    
+    any(grepl('entrez.tsv.gz$', files))
 }
 
 ## the available.ensembl.datasets function takes 20 seconds to make a small
@@ -1558,21 +1585,19 @@ available.ensembl.datasets <-
         datSets <- NULL
     }
     if (is.null(datSets) || is.null(taxId) || length(taxId)>0) {
-        loadNamespace("biomaRt")
+        
+        if (is.null(release)) {
+            release <- getCurrentEnsemblRelease()
+        }
+        
         fastaSpecs <- available.FastaEnsemblSpecies(release=release)
+        fasta_specs <- tolower(gsub(x = fastaSpecs, pattern = " ", replacement = "_"))
         if (is.null(taxId)) {
             taxId <- setdiff(names(fastaSpecs), names(datSets))
         }
         g.specs <- unlist(lapply(fastaSpecs, g.species))
-        ftpStrs <- paste0(g.specs, "_gene_ensembl")
-        names(ftpStrs) <- names(g.specs)
-        ## then get listing of the dataSets
-        ens <- biomaRt::useEnsembl('ensembl', version=release)
-        availableDatSets <- biomaRt::listDatasets(ens)$dataset
-        ## so which of the datSets are also in the FTP site?
-        ## (when initially tested these two groups were perfectly synced)
-        availableDatSets <- ftpStrs[ftpStrs %in% availableDatSets]
-        neededDatSets <- availableDatSets[names(availableDatSets) %in% taxId]
+        names(fasta_specs) <- names(g.specs)
+        neededDatSets <- fasta_specs[names(fasta_specs) %in% taxId]
         if (length(neededDatSets)>0) {
             if (length(neededDatSets)>4) {
                 ## Friendly message
@@ -1580,8 +1605,9 @@ available.ensembl.datasets <-
                               be annotated with ensembl IDs. "))
             }
             ## Remove dataSets that don't map to EntrezIds:
-            legitTaxIdxs <- unlist(lapply(names(neededDatSets), .ensemblMapsToEntrezId,
-                                          datSets=neededDatSets, release=release))
+            legitTaxIdxs <- mapply(.ensemblMapsToEntrezId, 
+                                   names(neededDatSets), neededDatSets, 
+                                   MoreArgs = list(release = release))
             neededDatSets <- neededDatSets[legitTaxIdxs]
             datSets <- c(datSets, neededDatSets)
 
@@ -1596,17 +1622,22 @@ available.ensembl.datasets <-
 .getEnsemblData <-
     function(taxId, release=NULL)
 {
-    loadNamespace("biomaRt")
+    if (is.null(release)) {
+        release <- getCurrentEnsemblRelease()
+    }
+        
     datSets <- available.ensembl.datasets(taxId, release=release)
     datSet <- datSets[names(datSets) %in% taxId]
-    ens <- biomaRt::useEnsembl('ensembl', datSet, version=release)
-    colName <- if (is.null(release) || as.integer(release)>=97) "entrezgene_id" else "entrezgene"
-    res <- biomaRt::getBM(
-        attributes=c(colName,"ensembl_gene_id"),
-        mart=ens)
+    
+    files <- getFilesInEnsemblFTP(species = datSet, release = release)
+    entrez_map_file <- grep(files, pattern = 'entrez.tsv.gz$', value = TRUE)
+    url <- sprintf('ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/%s', release, datSet, entrez_map_file)
+    
+    dest_file <- tempfile()
+    download.file(url, destfile = dest_file, mode = "wb")
+    res <- read.delim(dest_file)[,c('xref', 'gene_stable_id')]
     colnames(res) <- c("gene_id","ensembl")
     res <- res[!is.na(res$gene_id),]
-    res[['gene_id']] <- as.character(res[['gene_id']])
-    res[['ensembl']] <- as.character(res[['ensembl']])
     unique(res)
+
 }
