@@ -1463,25 +1463,30 @@ makeOrgPackageFromNCBI <-
 ## Code for adding Ensembl IDs for those species supported by ensembl
 ## with GTF files.
 
-## use the Ensemb Rest API to get the current version
+## use the Ensembl Rest API to get the current Ensembl version
 getCurrentEnsemblRelease <- function() {
     
+    loadNamespace("httr2")
+    
     req <- httr2::request("https://rest.ensembl.org/info/data/") |>
-        req_headers("Accept" = "application/json")
+        httr2::req_headers("Accept" = "application/json")
     
     version <- req |> 
-        req_perform() |>
-        resp_body_json() |>
+        httr2::req_perform() |>
+        httr2::resp_body_json() |>
         unlist() |>
         as.integer()
     
     return(version)
 }
 
-## list files in FTP directory
-getFilesInEnsemblFTP <- function(species, release) {
+## list files in Ensembl FTP TSV directory
+## this is used to identify if there is an ensembl<->entrez mapping file
+listFilesInEnsemblFTP <- function(species, release, dir) {
     
-    ftp_dir <- sprintf("ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/", release, species)
+    loadNamespace("curl")
+    
+    ftp_dir <- sprintf("ftp://ftp.ensembl.org/pub/release-%s/%s/%s/", release, dir, species)
     
     list_files <- curl::new_handle()
     curl::handle_setopt(list_files, ftp_use_epsv = TRUE, dirlistonly = TRUE)
@@ -1560,7 +1565,7 @@ g.species <-
 {
     message("TaxID: ", taxId)
 
-    files <- getFilesInEnsemblFTP(species = species, release = release)
+    files <- listFilesInEnsemblFTP(species = species, release = release, dir = 'tsv')
     
     any(grepl('entrez.tsv.gz$', files))
 }
@@ -1568,6 +1573,8 @@ g.species <-
 ## the available.ensembl.datasets function takes 20 seconds to make a small
 ## vector.  So stash the results here for faster reuse/access on
 ## subsequent calls
+## ## TODO: this caching mechanism may not be necessary anymore with the move away from biomaRt
+## ## Nonetheless it still works so doesn't need to be removed - MLSmith 2024-04-08
 ensemblDatasets <- new.env(hash=TRUE, parent=emptyenv())
 ## populate the above with: available.ensembl.datasets()
 
@@ -1628,16 +1635,23 @@ available.ensembl.datasets <-
         
     datSets <- available.ensembl.datasets(taxId, release=release)
     datSet <- datSets[names(datSets) %in% taxId]
-    
-    files <- getFilesInEnsemblFTP(species = datSet, release = release)
-    entrez_map_file <- grep(files, pattern = 'entrez.tsv.gz$', value = TRUE)
-    url <- sprintf('ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/%s', release, datSet, entrez_map_file)
-    
-    dest_file <- tempfile()
-    download.file(url, destfile = dest_file, mode = "wb")
-    res <- read.delim(dest_file)[,c('xref', 'gene_stable_id')]
-    colnames(res) <- c("gene_id","ensembl")
-    res <- res[!is.na(res$gene_id),]
-    unique(res)
+    if(length(datSet) == 0) {
+        ## TODO: Is this a sensible return value?  Should it be an error?
+        return(NULL)
+    } else {
+        ## list the files in the species level TSV folder.  There should always be a entrez mapping
+        ## file as we checked for it earlier.  Find it and construct a URL with that file name.
+        files <- listFilesInEnsemblFTP(species = datSet, release = release, dir = 'tsv')
+        entrez_map_file <- grep(files, pattern = 'entrez.tsv.gz$', value = TRUE)
+        url <- sprintf('ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/%s', release, datSet, entrez_map_file)
+        
+        ## download the mapping file, extract the relevant columns, rename, and return unique rows
+        dest_file <- tempfile()
+        download.file(url, destfile = dest_file, mode = "wb")
+        res <- read.delim(dest_file)[,c('xref', 'gene_stable_id')]
+        colnames(res) <- c("gene_id","ensembl")
+        res <- res[!is.na(res$gene_id),]
+        unique(res)
+    }
 
 }
