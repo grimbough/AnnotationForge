@@ -170,9 +170,14 @@
 .downloadAndSaveToTemp <-
     function(url, tmp)
 {
-    loadNamespace("RCurl")
-    if (!RCurl::url.exists(url))
-        stop("URL '", url, "' does not exist")
+    loadNamesspace("httr2")
+    req <- httr2::request(url) |>
+        req_method("HEAD") |>
+        req_error(is_error = ~ FALSE)
+    resp <- req_perform(req)
+    if(httr2::resp_is_error(resp))
+        stop("URL '", url, "' does not exist")    
+
 ##    binRes <- RCurl::getBinaryURL(url)
 ##    writeBin(binRes, con=tmp)
     ## RCurl on Windows has TLS problems
@@ -1502,30 +1507,23 @@ listFilesInEnsemblFTP <- function(species, release, dir) {
 ## gene ID data.  The names will be tax ids...
 getFastaSpeciesDirs <-
     function(release=NULL)
-{
-    if (is.null(release)) {
-      release <- getCurrentEnsemblRelease()
+    {
+        if (is.null(release)) {
+            release <- getCurrentEnsemblRelease()
+        }
+
+        listing <- listFilesInEnsemblFTP(release = release, species = "", dir = "mysql")
+        res <- grep(pattern = paste0("_core_", release, "_"), res2, value = TRUE)
+        
+        specNames <- available.FastaEnsemblSpecies(res, release=release)
+        taxdb <- GenomeInfoDb::loadTaxonomyDb()
+        organisms <- trimws(paste(taxdb[["genus"]], taxdb[["species"]]))
+        idx <- match(specNames, organisms)
+        res <- res[!is.na(idx)]
+        names(res) <- as.integer(taxdb[["tax_id"]][idx[!is.na(idx)]])
+        res
     }
-    baseUrl <- paste0("ftp://ftp.ensembl.org/pub/release-", release, "/mysql/")
-    loadNamespace("RCurl")
-    curlHand <- RCurl::getCurlHandle()
-    listing <- RCurl::getURL(url=baseUrl, followlocation=TRUE, curl=curlHand)
-    listing<- strsplit(listing, "\r?\n")[[1]]
-    cores <- listing[grepl(paste0("_core_", release, "_"), listing)]
-    coreDirs <- cores[!grepl('\\.', cores) & !grepl('\\:$', cores)]
-    .getDirOnly <- function(item) {
-        dir <- unlist(strsplit(item, ' '))
-        dir[length(dir)]
-    }
-    res <-unlist(lapply(coreDirs, .getDirOnly))
-    specNames <- available.FastaEnsemblSpecies(res, release=release)
-    taxdb <- GenomeInfoDb::loadTaxonomyDb()
-    organisms <- trimws(paste(taxdb[["genus"]], taxdb[["species"]]))
-    idx <- match(specNames, organisms)
-    res <- res[!is.na(idx)]
-    names(res) <- as.integer(taxdb[["tax_id"]][idx[!is.na(idx)]])
-    res
-}
+
 
 ## Helper for getting precise genus and species available via
 ## FTP. (and their Tax IDs)
