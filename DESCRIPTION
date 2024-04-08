@@ -14,6 +14,9 @@ Authors@R: c(
         person("Hervé", "Pagès", role = "aut"),
         person("Madelyn", "Carlson", role = "ctb",
                 comment = "'Creating probe packages' vignette translation from Sweave to Rmarkdown / HTML"),
+        person(c("Mike", "L."), "Smith", role = "ctb",
+                comment = c(ORCID = "0000-0002-7800-3848")
+              ),
         person("Bioconductor Package Maintainer", role = "cre",
                 email = "maintainer@bioconductor.org")
         )
