@@ -170,7 +170,7 @@
 .downloadAndSaveToTemp <-
     function(url, tmp)
 {
-    loadNamesspace("httr2")
+    loadNamespace("httr2")
     req <- httr2::request(url) |>
         req_method("HEAD") |>
         req_error(is_error = ~ FALSE)
@@ -1513,7 +1513,7 @@ getFastaSpeciesDirs <-
         }
 
         listing <- listFilesInEnsemblFTP(release = release, species = "", dir = "mysql")
-        res <- grep(pattern = paste0("_core_", release, "_"), res2, value = TRUE)
+        res <- grep(pattern = paste0("_core_", release, "_"), listing, value = TRUE)
         
         specNames <- available.FastaEnsemblSpecies(res, release=release)
         taxdb <- GenomeInfoDb::loadTaxonomyDb()
