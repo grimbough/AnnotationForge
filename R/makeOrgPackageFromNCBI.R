@@ -170,12 +170,8 @@
 .downloadAndSaveToTemp <-
     function(url, tmp)
 {
-    loadNamespace("httr2")
-    req <- httr2::request(url) |>
-        req_method("HEAD") |>
-        req_error(is_error = ~ FALSE)
-    resp <- req_perform(req)
-    if(httr2::resp_is_error(resp))
+
+    if(httr::http_error(url))
         stop("URL '", url, "' does not exist")    
 
 ##    binRes <- RCurl::getBinaryURL(url)
@@ -1471,16 +1467,8 @@ makeOrgPackageFromNCBI <-
 ## use the Ensembl Rest API to get the current Ensembl version
 getCurrentEnsemblRelease <- function() {
     
-    loadNamespace("httr2")
-    
-    req <- httr2::request("https://rest.ensembl.org/info/data/") |>
-        httr2::req_headers("Accept" = "application/json")
-    
-    version <- req |> 
-        httr2::req_perform() |>
-        httr2::resp_body_json() |>
-        unlist() |>
-        as.integer()
+    res <- httr::GET("https://rest.ensembl.org/info/data/", httr::accept_json())
+    version <- as.integer(unlist(httr::content(res)))
     
     return(version)
 }

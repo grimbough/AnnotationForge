@@ -22,8 +22,8 @@ Authors@R: c(
         )
 Depends: R (>= 3.5.0), methods, utils, BiocGenerics (>= 0.15.10),
         Biobase (>= 1.17.0), AnnotationDbi (>= 1.33.14)
-Imports: DBI, RSQLite, XML, S4Vectors, httr2
-Suggests: httr, GenomeInfoDb (>= 1.17.1), Biostrings, affy,
+Imports: DBI, RSQLite, XML, S4Vectors, httr
+Suggests: GenomeInfoDb (>= 1.17.1), Biostrings, affy,
         hgu95av2.db, human.db0, org.Hs.eg.db,
         Homo.sapiens, GO.db, markdown,
         BiocStyle, knitr, BiocManager, BiocFileCache, RUnit,

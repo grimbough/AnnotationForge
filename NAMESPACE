@@ -9,7 +9,7 @@ import(BiocGenerics)
 import(S4Vectors)
 import(AnnotationDbi)
 import(XML)
-import(httr2)
+import(httr)
 
 exportClasses(
     ## from R/AnnDbPkg-maker.R
