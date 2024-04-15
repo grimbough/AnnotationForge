@@ -1623,10 +1623,11 @@ available.ensembl.datasets <-
     datSet <- datSets[names(datSets) %in% taxId]
     if(length(datSet) == 0) {
         ## TODO: Is this a sensible return value?  Should it be an error?
-        return(NULL)
+        stop('No Ensembl dataset found matching the taxId: ', taxId)
     } else {
         ## list the files in the species level TSV folder.  There should always be a entrez mapping
-        ## file as we checked for it earlier.  Find it and construct a URL with that file name.
+        ## file as we checked for it earlier with available.ensembl.datasets()
+        ## Find it and construct a URL with that file name.
         files <- listFilesInEnsemblFTP(species = datSet, release = release, dir = 'tsv')
         entrez_map_file <- grep(files, pattern = 'entrez.tsv.gz$', value = TRUE)
         url <- sprintf('ftp://ftp.ensembl.org/pub/release-%s/tsv/%s/%s', release, datSet, entrez_map_file)
