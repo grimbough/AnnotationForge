@@ -22,7 +22,7 @@ Depends: R (>= 3.5.0), methods, utils, BiocGenerics (>= 0.15.10),
 Imports: DBI, RSQLite, XML, S4Vectors, RCurl
 Suggests: biomaRt, httr, GenomeInfoDb (>= 1.17.1), Biostrings, affy,
         hgu95av2.db, human.db0, org.Hs.eg.db,
-        Homo.sapiens, GO.db, markdown,
+        Homo.sapiens, GO.db, rmarkdown,
         BiocStyle, knitr, BiocManager, BiocFileCache, RUnit
 VignetteBuilder: knitr
 BuildKeepEmpty: TRUE
